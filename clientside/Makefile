@@ -54,22 +54,22 @@ search:
 
 ### Analyze ###
 
-# Plots the average cycle count with regard to each possible value (0 to 255) 
+# Plots the average cycle count with regard to each possible value (0 to 255)
 # for each byte of the input block (plaintext[0] to plaintext[15]).
 # Each subplot corresponds to one of the 16 bytes of the input plaintext block.
 # The input data are the most recent values obtained with the study phase.
 overview_study:
 	tail -4096 ${RES_PATH}/study.800 > ${RES_PATH}/study_tmp
-	python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/study_tmp
+	pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/study_tmp
 	rm ${RES_PATH}/study_tmp
 
-# Plots the average cycle count with regard to each possible value (0 to 255) 
+# Plots the average cycle count with regard to each possible value (0 to 255)
 # for each byte of the input block (plaintext[0] to plaintext[15]).
 # Each subplot corresponds to one of the 16 bytes of the input plaintext block.
 # The input data are the most recent values obtained with the attack phase.
 overview_attack:
 	tail -4096 ${RES_PATH}/attack.800 > ${RES_PATH}/attack_tmp
-	python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/attack_tmp
+	pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/attack_tmp
 	rm ${RES_PATH}/attack_tmp
 
 # Shows a representation of the 'supposed known bits' of the private key.
@@ -79,5 +79,5 @@ overview_attack:
 # User can manually execute the script with custom probability as threshold.
 show_known_bits:
 	tail -16 ${RES_PATH}/attack > ${RES_PATH}/attack_tmp
-	python3 ${TOOLS_PATH}/known_bits.py ${RES_PATH}/attack_tmp ${DEFAULT_PROBABILITY}
+	pipenv run python3 ${TOOLS_PATH}/known_bits.py ${RES_PATH}/attack_tmp ${DEFAULT_PROBABILITY}
 	rm ${RES_PATH}/attack_tmp

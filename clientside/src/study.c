@@ -100,19 +100,18 @@ void printpatterns(void)
     int b;
     double taverage;
     taverage = ttotal / packets;
-    for (j = 0; j < 16; ++j)
-        for (b = 0; b < 256; ++b)
-        {
+    for (j = 0; j < 16; ++j) {
+        for (b = 0; b < 256; ++b) {
             u[j][b] = t[j][b] / tnum[j][b];
             udev[j][b] = tsq[j][b] / tnum[j][b];
             udev[j][b] -= u[j][b] * u[j][b];
             udev[j][b] = sqrt(udev[j][b]);
         }
-    for (j = 0; j < 16; ++j)
-    {
-        for (b = 0; b < 256; ++b)
-        {
-            printf("%2d %4d %3d %lld %.3f %.3f %.6f %.6f\n", j, size, b, tnum[j][b], u[j][b], udev[j][b], u[j][b] - taverage, udev[j][b] / sqrt(tnum[j][b]));
+    }
+    for (j = 0; j < 16; ++j) {
+        for (b = 0; b < 256; ++b) {
+            printf( "%2d %4d %3d %lld %.3f %.3f %.6f %.6f\n",
+                j, size , b, tnum[j][b], u[j][b], udev[j][b], u[j][b] - taverage, udev[j][b] / sqrt(tnum[j][b]));
         }
     }
     fflush(stdout);
