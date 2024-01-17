@@ -6,7 +6,7 @@ BIN_PATH=bin
 
 build:
 	mkdir -p ${BIN_PATH}
-	gcc -O3 -o ${BIN_PATH}/server ${SRC_PATH}/server.c -lcrypto -Wno-deprecated-declarations
+	gcc -O3 -g -o ${BIN_PATH}/server ${SRC_PATH}/server.c -lcrypto -Wno-deprecated-declarations
 
 clear_bin:
 	rm -rf ${BIN_PATH}
