@@ -10,6 +10,7 @@
  *
  */
 
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -37,7 +38,7 @@ void tally(double timing)
     int j;
     int b;
     for (j = 0; j < 16; ++j) {
-        b = 255 & (int)plainBytes[j];
+        b = 255 & plainBytes[j];
         ++totalPackets;
         totalTime += timing;
         timeArray[j][b] += timing;
@@ -76,32 +77,29 @@ void studyinput(void)
         if (poll(&p, 1, 100) <= 0) {
             continue;
         }
-        while (p.revents & POLLIN)
-        {
-            if (recv(s, response, sizeof response, 0) == sizeof response)
-            {
-                if (!memcmp(packet, response, 16))
-                {
-                    unsigned int timing;
-                    timing = *(unsigned int *)(response + 40);
-                    timing -= *(unsigned int *)(response + 32);
+        while (p.revents & POLLIN) {
+            if (recv(s, response, sizeof response, 0) == sizeof response) {
+                if (!memcmp(packet, response, 16)) {
+                    uint64_t timing;
+                    timing = *(uint64_t*)(response + 40);
+                    timing -= *(uint64_t*)(response + 32);
                     if (timing < 10000) {
-                        /* clip tail to reduce noise */
+                        // clip tail to reduce noise
                         tally(timing);
                         return;
                     }
                 }
             }
-            if (poll(&p, 1, 0) <= 0)
+            if (poll(&p, 1, 0) <= 0) {
                 break;
+            }
         }
     }
 }
 
 void printpatterns(void)
 {
-    int j;
-    int b;
+    int j, b;
     double taverage;
     taverage = totalTime / totalPackets;
     for (j = 0; j < 16; ++j) {
@@ -114,8 +112,14 @@ void printpatterns(void)
     }
     for (j = 0; j < 16; ++j) {
         for (b = 0; b < 256; ++b) {
-            printf( "%2d %4d %3d %lld %.3f %.3f %.6f %.6f\n",
-                j, size , b, countArray[j][b], meanArray[j][b], standardDeviationArray[j][b], meanArray[j][b] - taverage, standardDeviationArray[j][b] / sqrt(countArray[j][b]));
+            printf("%2d %4d %3d %lld %.3f %.3f %.6f %.6f\n",
+                j, size, b,
+                countArray[j][b],
+                meanArray[j][b],
+                standardDeviationArray[j][b],
+                meanArray[j][b] - taverage,
+                standardDeviationArray[j][b] / sqrt(countArray[j][b])
+            );
         }
     }
     fflush(stdout);
@@ -157,7 +161,8 @@ int main(int argc, char **argv)
     for (;;) {
         studyinput();
         ++inputs;
-        if (timetoprint(inputs))
+        if (timetoprint(inputs)) {
             printpatterns();
+        }
     }
 }

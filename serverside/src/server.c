@@ -36,13 +36,27 @@ inline unsigned long long timestamp(void)
     //asm volatile("rdtsc" : "=a" (low), "=d" (high));
     //return ((unsigned long long)high << 32) | low;
 }
-*/
+
+static inline uint64_t timestamp() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
+}
 
 static inline uint64_t timestamp()
 {
     uint64_t cycles;
     __asm__ volatile("rdtsc" : "=A"(cycles));
     return cycles;
+}
+*/
+
+inline uint64_t timestamp(void)
+{
+    uint32_t bottom;
+    uint32_t top;
+    asm volatile(".byte 15;.byte 49" : "=a"(bottom), "=d"(top));
+    return ((uint64_t)top << 32) | bottom;
 }
 
 unsigned char key[16];

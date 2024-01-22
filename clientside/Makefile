@@ -14,7 +14,7 @@ build:
 	gcc -O3 -o ${BIN_PATH}/study ${SRC_PATH}/study.c -lm
 	gcc -O3 -o ${BIN_PATH}/ciphertext ${SRC_PATH}/ciphertext.c
 	gcc -O3 -o ${BIN_PATH}/correlate ${SRC_PATH}/correlate.c -lm
-	gcc -O3 -o ${BIN_PATH}/search ${SRC_PATH}/search.c -lcrypto -Wno-deprecated-declarations -Wno-unused-result
+	gcc -O3 -o ${BIN_PATH}/search ${SRC_PATH}/search.c -L/usr/local/lib -lcrypto -Wno-deprecated-declarations -Wno-unused-result
 
 clear_bin:
 	rm -rf ${BIN_PATH}
@@ -60,7 +60,8 @@ search:
 # The input data are the most recent values obtained with the study phase.
 overview_study:
 	tail -4096 ${RES_PATH}/study.800 > ${RES_PATH}/study_tmp
-	pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/study_tmp
+	#pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/study_tmp
+	python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/study_tmp
 	rm ${RES_PATH}/study_tmp
 
 # Plots the average cycle count with regard to each possible value (0 to 255)
@@ -69,7 +70,8 @@ overview_study:
 # The input data are the most recent values obtained with the attack phase.
 overview_attack:
 	tail -4096 ${RES_PATH}/attack.800 > ${RES_PATH}/attack_tmp
-	pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/attack_tmp
+	#pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/attack_tmp
+	python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/attack_tmp
 	rm ${RES_PATH}/attack_tmp
 
 # Shows a representation of the 'supposed known bits' of the private key.
@@ -79,5 +81,6 @@ overview_attack:
 # User can manually execute the script with custom probability as threshold.
 show_known_bits:
 	tail -16 ${RES_PATH}/attack > ${RES_PATH}/attack_tmp
-	pipenv run python3 ${TOOLS_PATH}/known_bits.py ${RES_PATH}/attack_tmp ${DEFAULT_PROBABILITY}
+	#pipenv run python3 ${TOOLS_PATH}/known_bits.py ${RES_PATH}/attack_tmp ${DEFAULT_PROBABILITY}
+	python3 ${TOOLS_PATH}/known_bits.py ${RES_PATH}/attack_tmp ${DEFAULT_PROBABILITY}
 	rm ${RES_PATH}/attack_tmp
