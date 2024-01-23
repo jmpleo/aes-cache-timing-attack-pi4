@@ -1,12 +1,17 @@
 SRC_PATH=src
 BIN_PATH=bin
-
+AES_PATH=../simple-aes
 
 ### Build ###
 
 build:
 	mkdir -p ${BIN_PATH}
-	gcc -O3 -g -o ${BIN_PATH}/server ${SRC_PATH}/server.c -L/usr/local/lib -lcrypto -Wno-deprecated-declarations
+	#gcc -O3 -o ${BIN_PATH}/server ${SRC_PATH}/server.c -L/usr/local/lib -lcrypto -Wno-deprecated-declarations
+	gcc -O3 -Wno-deprecated-declarations \
+		${SRC_PATH}/server.c \
+		${AES_PATH}/aes.c \
+		${AES_PATH}/gmult.c \
+		-o ${BIN_PATH}/server
 
 clear_bin:
 	rm -rf ${BIN_PATH}

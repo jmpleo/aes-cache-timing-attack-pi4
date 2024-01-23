@@ -24,68 +24,153 @@
 #include <stdio.h>
 #include <math.h>
 
-double totalPackets;
-double totalTime;
-double timeArray[16][256];
-double timeSquaredArray[16][256];
-long long countArray[16][256];
-double meanArray[16][256];
-double standardDeviationArray[16][256];
-char plainBytes[16];
+#define MAX_MESS_LEN 2048
 
-void tally(double timing)
+struct Packet {
+    uint8_t nonce[16];  // 16
+    uint8_t out[16]; // 16
+    uint64_t timestampStart; // 8
+    uint64_t timestampEnd;   // 8
+}; // 48
+
+int s, messageLen;
+
+double totalPackets = 0.;
+double totalTime    = 0.;
+double timeArray[16][256]              = {0.};
+double meanArray[16][256]              = {0.};
+double standardDeviationArray[16][256] = {0.};
+
+long long countArray[16][256] = {0};
+
+char nonceBytes[16];
+char messageBuffer[MAX_MESS_LEN];
+char responseBuffer[sizeof(struct Packet)];
+
+inline int timeToReport(long long inputs)
 {
-    int j;
-    int b;
-    for (j = 0; j < 16; ++j) {
-        b = 255 & plainBytes[j];
-        ++totalPackets;
-        totalTime += timing;
-        timeArray[j][b] += timing;
-        timeSquaredArray[j][b] += timing * timing;
-        countArray[j][b] += 1;
+    return
+        inputs >= 10000
+        &&
+        !(inputs & (inputs - 1)); // if inputs == 2^k
+}
+
+void collectByteTimingStatistics(double timing);
+
+void receivePacket();
+
+/*
+ * report to stdout follow statistics:
+ * - Byte number of Nonce in packet;
+ * - Lenght of message;
+ * - Byte value of nonce byte number;
+ * - Total message for this number and byte value;
+ * - Mean timing
+ * - Std timing
+ * - Mean timing - mean timing for all packet
+ * - Std timing - sqrt of total mess
+ */
+void report();
+
+int main(int argc, char **argv)
+{
+    if (!argv[1]) {
+        return 100;
+    }
+
+    struct sockaddr_in server;
+
+    if (!inet_aton(argv[1], &server.sin_addr)) {
+        return 100;
+    }
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(10000);
+
+    if (!argv[2]) {
+        return 100;
+    }
+
+    messageLen = atoi(argv[2]);
+
+    if (messageLen < 16 || messageLen > sizeof messageBuffer) {
+        fprintf(stderr, "Mess len must be >= 16 and <= %d", MAX_MESS_LEN);
+        return 100;
+    }
+
+    while ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+        sleep(1);
+    }
+
+    while (connect(s, (struct sockaddr *)&server, sizeof server) == -1) {
+        sleep(1);
+    }
+
+    long long inputs = 0;
+
+    for (;;) {
+        receivePacket();
+        ++inputs;
+        if (timeToReport(inputs)) {
+            report();
+        }
     }
 }
 
-int s;
-int size;
 
-void studyinput(void)
+void collectByteTimingStatistics(double timing)
 {
-    int j;
-    char packet[2048];
-    char response[48];
+    for (int byteValue, byteNumber = 0; byteNumber < 16; ++byteNumber) {
+
+        byteValue = 255 & nonceBytes[byteNumber];
+        ++totalPackets;
+        totalTime += timing;
+
+        // summary timing for the num nonce and byte value
+        timeArray[byteNumber][byteValue] += timing;
+
+        standardDeviationArray[byteNumber][byteValue] += (timing * timing);
+
+        // total packet localy (num, value)
+        ++(countArray[byteNumber][byteValue]);
+    }
+}
+
+
+void receivePacket()
+{
+    uint64_t start, end, timing;
+    int byteNumber;
+
     struct pollfd p;
-    for (;;)
-    {
-        if (size < 16) {
-            continue;
+
+    for (;;) {
+
+        for (byteNumber = 0; byteNumber < 16; ++byteNumber) {
+            nonceBytes[byteNumber] = messageBuffer[byteNumber] = random();
         }
-        if (size > sizeof packet) {
-            continue;
+
+        for (; byteNumber < messageLen; ++byteNumber) {
+            messageBuffer[byteNumber] = random();
         }
-        /* a mediocre PRNG is sufficient here */
-        for (j = 0; j < size; ++j) {
-            packet[j] = random();
-        }
-        for (j = 0; j < 16; ++j) {
-            plainBytes[j] = packet[j];
-        }
-        send(s, packet, size, 0);
+
+        send(s, messageBuffer, messageLen, 0);
         p.fd = s;
         p.events = POLLIN;
+
         if (poll(&p, 1, 100) <= 0) {
             continue;
         }
+
         while (p.revents & POLLIN) {
-            if (recv(s, response, sizeof response, 0) == sizeof response) {
-                if (!memcmp(packet, response, 16)) {
-                    uint64_t timing;
-                    timing = *(uint64_t*)(response + 40);
-                    timing -= *(uint64_t*)(response + 32);
-                    if (timing < 10000) {
-                        // clip tail to reduce noise
-                        tally(timing);
+            if (recv(s, responseBuffer, sizeof responseBuffer, 0) == sizeof responseBuffer) {
+                // same nonces
+                if (!memcmp(messageBuffer, responseBuffer, 16)) {
+                    start = ((struct Packet*)responseBuffer)->timestampStart;
+                    end = ((struct Packet*)responseBuffer)->timestampEnd;
+                    timing = end - start;
+                    if (timing < 20000) {
+                        collectByteTimingStatistics(timing);
                         return;
                     }
                 }
@@ -97,72 +182,42 @@ void studyinput(void)
     }
 }
 
-void printpatterns(void)
+
+void report()
 {
-    int j, b;
-    double taverage;
-    taverage = totalTime / totalPackets;
-    for (j = 0; j < 16; ++j) {
-        for (b = 0; b < 256; ++b) {
-            meanArray[j][b] = timeArray[j][b] / countArray[j][b];
-            standardDeviationArray[j][b] = timeSquaredArray[j][b] / countArray[j][b];
-            standardDeviationArray[j][b] -= meanArray[j][b] * meanArray[j][b];
-            standardDeviationArray[j][b] = sqrt(standardDeviationArray[j][b]);
+    double timeOnPacketAvg = totalTime / totalPackets;
+    int byteValue, byteNumber;
+
+    for (byteNumber = 0; byteNumber < 16; ++byteNumber) {
+        for (byteValue = 0; byteValue < 256; ++byteValue) {
+
+            meanArray[byteNumber][byteValue]
+                = timeArray[byteNumber][byteValue] / countArray[byteNumber][byteValue];
+
+            standardDeviationArray[byteNumber][byteValue]
+                = standardDeviationArray[byteNumber][byteValue] / countArray[byteNumber][byteValue];
+
+            standardDeviationArray[byteNumber][byteValue]
+                -= (meanArray[byteNumber][byteValue] * meanArray[byteNumber][byteValue]);
+
+            standardDeviationArray[byteNumber][byteValue]
+                = sqrt(standardDeviationArray[byteNumber][byteValue]);
         }
     }
-    for (j = 0; j < 16; ++j) {
-        for (b = 0; b < 256; ++b) {
+
+    for (byteNumber = 0; byteNumber < 16; ++byteNumber) {
+        for (byteValue = 0; byteValue < 256; ++byteValue) {
             printf("%2d %4d %3d %lld %.3f %.3f %.6f %.6f\n",
-                j, size, b,
-                countArray[j][b],
-                meanArray[j][b],
-                standardDeviationArray[j][b],
-                meanArray[j][b] - taverage,
-                standardDeviationArray[j][b] / sqrt(countArray[j][b])
+                byteNumber, messageLen, byteValue,
+                countArray[byteNumber][byteValue],
+                meanArray[byteNumber][byteValue],
+                standardDeviationArray[byteNumber][byteValue],
+                meanArray[byteNumber][byteValue] - timeOnPacketAvg,
+                standardDeviationArray[byteNumber][byteValue] / sqrt(countArray[byteNumber][byteValue])
             );
         }
     }
     fflush(stdout);
 }
 
-int timetoprint(long long inputs)
-{
-    if (inputs < 10000) {
-        return 0;
-    }
-    if (!(inputs & (inputs - 1))) {
-        return 1;
-    }
-    return 0;
-}
 
-int main(int argc, char **argv)
-{
-    struct sockaddr_in server;
-    long long inputs = 0;
-    if (!argv[1]) {
-        return 100;
-    }
-    if (!inet_aton(argv[1], &server.sin_addr)) {
-        return 100;
-    }
-    server.sin_family = AF_INET;
-    server.sin_port = htons(10000);
-    if (!argv[2]) {
-        return 100;
-    }
-    size = atoi(argv[2]);
-    while ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-        sleep(1);
-    }
-    while (connect(s, (struct sockaddr *)&server, sizeof server) == -1) {
-        sleep(1);
-    }
-    for (;;) {
-        studyinput();
-        ++inputs;
-        if (timetoprint(inputs)) {
-            printpatterns();
-        }
-    }
-}

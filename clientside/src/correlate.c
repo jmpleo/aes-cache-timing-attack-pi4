@@ -7,58 +7,71 @@
  *    The University of Illinois at Chicago
  *    Chicago, IL 60607–7045
  *    djb@cr.yp.to
- *
  */
-
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-double firstTimeArray[16][256];
-double timeDeviationArray[16][256];
-double secondTimeArray[16][256];
-double standardDeviationArray[16][256];
+double fisrtTimeMeanArray[16][256];
+double firstTimeStdArray[16][256];
+double secondTimeMeanArray[16][256];
+double secondTimeStdArray[16][256];
 
 double correlationCoefficients[256];
 double squaredDeviationSum[256];
-int sortedCorrelationPositions[256];
+int correlationPositions[256];
 
-void readdata(void)
+void readTimings(void)
 {
     int lines;
-    int b;
-    int size;
-    int j;
-    long long packets;
-    double cycles;
-    double deviation;
-    double aboveaverage;
-    double avdev;
-    for (lines = 0; lines < 8192; ++lines) {
+
+    int byteNumber, messageLen, byteValue;
+
+    long long totalLocalPackets;
+
+    double timingMean,
+           timingMeanLocal,
+           timingStd,
+           timingStdLocal;
+
+    for (lines = 0; lines < 4096; ++lines) {
         if (scanf("%d%d%d%lld%lf%lf%lf%lf",
-                    &j, &size, &b,
-                    &packets,
-                    &cycles,
-                    &deviation,
-                    &aboveaverage,
-                    &avdev) != 8) {
+                &byteNumber, &messageLen, &byteValue,
+                &totalLocalPackets,
+                &timingMeanLocal,
+                &timingStdLocal,
+                &timingMean,
+                &timingStd) != 8) {
             exit(100);
         }
-        j &= 15;
-        b &= 255;
-        if (lines < 4096) {
-            firstTimeArray[j][b] = aboveaverage;
-            timeDeviationArray[j][b] = avdev;
+
+        byteNumber &= 15;
+        byteValue &= 255;
+
+        fisrtTimeMeanArray[byteNumber][byteValue] = timingMean;
+        firstTimeStdArray[byteNumber][byteValue] = timingStd;
+    }
+
+    for (; lines < 8192; ++lines) {
+        if (scanf("%d%d%d%lld%lf%lf%lf%lf",
+                &byteNumber, &messageLen, &byteValue,
+                &totalLocalPackets,
+                &timingMeanLocal,
+                &timingStdLocal,
+                &timingMean,
+                &timingStd) != 8) {
+            exit(100);
         }
-        else {
-            secondTimeArray[j][b] = aboveaverage;
-            standardDeviationArray[j][b] = avdev;
-        }
+        byteNumber &= 15;
+        byteValue &= 255;
+
+        secondTimeMeanArray[byteNumber][byteValue] = timingMean;
+        secondTimeStdArray[byteNumber][byteValue] = timingStd;
     }
 }
 
 
-int sortedCorrelationPositionscmp(const void *v1, const void *v2)
+int correlationPositionsCmp(const void *v1, const void *v2)
 {
     int *i1 = (int *)v1;
     int *i2 = (int *)v2;
@@ -71,47 +84,59 @@ int sortedCorrelationPositionscmp(const void *v1, const void *v2)
     return 0;
 }
 
-void processdata(void)
+void rangeKeyValue(void)
 {
-    int b, i, j, numCorrelated;
+    int byteNumber, byteValue, i, numCorrelated;
     double z;
-    for (b = 0; b < 16; ++b) {
+
+    for (byteNumber = 0; byteNumber < 16; ++byteNumber) {
         for (i = 0; i < 256; ++i) {
             correlationCoefficients[i] = squaredDeviationSum[i] = 0;
-            sortedCorrelationPositions[i] = i;
+            correlationPositions[i] = i;
 
-            for (j = 0; j < 256; ++j) {
-                correlationCoefficients[i] += firstTimeArray[b][j] * secondTimeArray[b][i ^ j];
-                z = timeDeviationArray[b][j] * secondTimeArray[b][i ^ j];
+            for (byteValue = 0; byteValue < 256; ++byteValue) {
+
+                correlationCoefficients[i] += (
+                    fisrtTimeMeanArray[byteNumber][byteValue] * secondTimeMeanArray[byteNumber][i ^ byteValue]
+                );
+
+                z = firstTimeStdArray[byteNumber][byteValue] * secondTimeMeanArray[byteNumber][i ^ byteValue];
                 squaredDeviationSum[i] += z * z;
-                z = firstTimeArray[b][j] * standardDeviationArray[b][i ^ j];
+
+                z = fisrtTimeMeanArray[byteNumber][byteValue] * secondTimeStdArray[byteNumber][i ^ byteValue];
                 squaredDeviationSum[i] += z * z;
             }
         }
-        qsort(sortedCorrelationPositions, 256, sizeof(int), sortedCorrelationPositionscmp);
+
+        qsort(correlationPositions, 256, sizeof(int), correlationPositionsCmp);
         numCorrelated = 0;
+
         for (i = 0; i < 256; ++i) {
-            if (correlationCoefficients[sortedCorrelationPositions[0]]
-                    - correlationCoefficients[sortedCorrelationPositions[i]]
-                        < 10 * sqrt(squaredDeviationSum[sortedCorrelationPositions[i]])) {
+            if (correlationCoefficients[correlationPositions[0]]
+                    - correlationCoefficients[correlationPositions[i]]
+                        < 10 * sqrt(squaredDeviationSum[correlationPositions[i]])) {
                 ++numCorrelated;
             }
         }
-        printf("%3d %2d", numCorrelated, b);
+
+        printf("%3d %2d", numCorrelated, byteNumber);
+
         for (i = 0; i < 256; ++i) {
-            if (correlationCoefficients[sortedCorrelationPositions[0]]
-                    - correlationCoefficients[sortedCorrelationPositions[i]]
-                        < 10 * sqrt(squaredDeviationSum[sortedCorrelationPositions[i]])) {
-                printf(" %02x", sortedCorrelationPositions[i]);
+            if (correlationCoefficients[correlationPositions[0]]
+                    - correlationCoefficients[correlationPositions[i]]
+                        < 10 * sqrt(squaredDeviationSum[correlationPositions[i]])) {
+                printf(" %02x", correlationPositions[i]);
             }
         }
+
         printf("\n");
     }
 }
 
 int main()
 {
-    readdata();
-    processdata();
+    readTimings();
+    rangeKeyValue();
     return 0;
 }
+

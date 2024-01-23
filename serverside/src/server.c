@@ -15,103 +15,36 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <openssl/aes.h>
+//#include <openssl/aes.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <time.h>
+//#include <time.h>
+#include <string.h>
 
-/* Returns a timestamp based on virtual CPU cycle count */
-/*
-inline unsigned long long timestamp(void)
-{
-    // asm volatile("mrs %0, cntvct_el0" : "=r"(cc));
-    //asm volatile("rdtsc" : "=A"(cc));
+#include "../../simple-aes/aes.h"
 
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    uint64_t cc = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-    return cc;
+#define PACKET_LEN 48
+#define MAX_MESSLEN 2000
 
-    //unsigned int low, high;
-    //asm volatile("rdtsc" : "=a" (low), "=d" (high));
-    //return ((unsigned long long)high << 32) | low;
-}
+uint8_t key[16];
+uint8_t* expandedKey;
+uint8_t scrambledZero[16];
 
-static inline uint64_t timestamp() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
-}
+struct Packet {
+    uint8_t nonce[16];  // 16
+    uint8_t out[16]; // 16
+    uint64_t timestampStart; // 8
+    uint64_t timestampEnd;   // 8
+}; // 48
 
-static inline uint64_t timestamp()
-{
-    uint64_t cycles;
-    __asm__ volatile("rdtsc" : "=A"(cycles));
-    return cycles;
-}
-*/
+void packetHandle(struct Packet *packet, char clientMessage[], int len);
 
 inline uint64_t timestamp(void)
 {
-    uint32_t bottom;
-    uint32_t top;
-    asm volatile(".byte 15;.byte 49" : "=a"(bottom), "=d"(top));
+    uint32_t bottom, top;
+    asm volatile ("rdtsc" : "=a"(bottom), "=d"(top));
     return ((uint64_t)top << 32) | bottom;
 }
-
-unsigned char key[16];
-AES_KEY expandedKey;
-unsigned char zerosPlainBlock[16];
-unsigned char cipherBlock[16];
-
-void handle(char out[48], char in[], int len)
-{
-    unsigned char workarea[len * 3];
-    int i;
-
-    // 0 0 0 0 ... 0
-    for (i = 0; i < 48; ++i) {
-        out[i] = 0;
-    }
-
-    // 0 0 0 ... 0 timestamp 0 0 0 0
-    *(uint64_t*)(out + 32) = timestamp();
-
-    if (len < 16) {
-        return;
-    }
-
-    // in[0] in[1] ... in[16] 0 0 0 0 ... 0 timestamp_start 0 0 0 0
-    for (i = 0; i < 16; ++i) {
-        out[i] = in[i];
-    }
-
-    // workarea = in[16] in[17] ... in [len - 1] ....
-    //for (i = 16; i < len; ++i) {
-    //    workarea[i] = in[i];
-    //}
-
-
-    AES_encrypt((unsigned char *)in, workarea, &expandedKey);
-    /* a real server would now check AES-based authenticator, */
-    /* process legitimate packets, and generate useful output */
-
-    // in[0] in[1] ... in[16] out[0] out[1] ... out[15] timestamp_start 0 0 0 0
-    for (i = 0; i < 16; ++i) {
-        out[16 + i] = cipherBlock[i];
-    }
-
-    // in[0] in[1] ... in[16] out[0] out[1] ... out[15] timestamp_start timestamp_end
-    *(uint64_t*)(out + 40) = timestamp();
-}
-
-struct sockaddr_in server;
-struct sockaddr_in client;
-socklen_t clientlen;
-int s;
-char in[1537];
-int r;
-char out[48];
 
 int main(int argc, char **argv)
 {
@@ -122,21 +55,29 @@ int main(int argc, char **argv)
         return 111;
     }
 
-    AES_set_encrypt_key(key, 128, &expandedKey);
-    AES_encrypt(zerosPlainBlock, cipherBlock, &expandedKey);
+    expandedKey = aes_init(sizeof key);
+    aes_key_expansion(key, expandedKey);
+
+    uint8_t zero[16] = {0};
+    aes_cipher(zero, scrambledZero, expandedKey);
 
     if (!argv[1]) {
+        fprintf(stderr, "Using: server <bind addr>\n");
         return 100;
     }
 
+    struct sockaddr_in server;
+    struct sockaddr_in client;
+
     if (!inet_aton(argv[1], &server.sin_addr)) {
+        fprintf(stderr, "Failed parsing addr\n");
         return 100;
     }
 
     server.sin_family = AF_INET;
     server.sin_port = htons(10000);
 
-    s = socket(AF_INET, SOCK_DGRAM, 0);
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
 
     if (s == -1) {
         fprintf(stderr, "Failed to create socket\n");
@@ -148,24 +89,62 @@ int main(int argc, char **argv)
         return 111;
     }
 
+    struct Packet packet;
+    char buffer[MAX_MESSLEN];
+    socklen_t clientSockLen;
+    int receivedPacketLen;
+
     for (;;) {
 
-        //fprintf(stdout, "listen...\n");
-        clientlen = sizeof client;
+        clientSockLen = sizeof client;
 
-        r = recvfrom(
-            s, in, sizeof in, 0, (struct sockaddr *)&client, &clientlen);
+        receivedPacketLen = recvfrom(
+            s,
+            buffer,
+            sizeof buffer,
+            0,
+            (struct sockaddr *)&client,
+            &clientSockLen
+        );
 
-        if (r < 16) {
+        if (receivedPacketLen < sizeof packet.nonce || receivedPacketLen >= sizeof buffer) {
             continue;
         }
 
-        if (r >= sizeof in) {
-            continue;
-        }
-
-        //fprintf(stdout, "recived %i \n", r);
-        handle(out, in, r);
-        sendto(s, out, 48, 0, (struct sockaddr *)&client, clientlen);
+        packetHandle(&packet, buffer, receivedPacketLen);
+        sendto(
+            s,
+            (uint8_t*)&packet,
+            sizeof packet,
+            0,
+            (struct sockaddr *)&client,
+            clientSockLen
+        );
     }
 }
+
+
+void packetHandle(struct Packet *packet, char clientMessage[], int len)
+{
+    uint8_t workarea[len];
+
+    if (len < sizeof packet->nonce) {
+        return;
+    }
+
+
+    memcpy(packet->nonce, clientMessage, sizeof packet->nonce);
+    memcpy(
+        workarea + sizeof packet->nonce,
+        clientMessage + sizeof packet->nonce,
+        sizeof workarea - sizeof packet->nonce
+    );
+
+    packet->timestampStart = timestamp();
+    aes_cipher(packet->nonce, workarea, expandedKey);
+    packet->timestampEnd = timestamp();
+
+    memcpy(packet->out, scrambledZero, sizeof packet->out);
+}
+
+

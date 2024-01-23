@@ -4,6 +4,7 @@ RES_PATH=results
 TOOLS_PATH=tools
 
 DEFAULT_PROBABILITY=1.0
+MESS_BYTES=800
 
 # The environment variable TARGET_IP has to be set by the user before !
 
@@ -33,11 +34,11 @@ ifeq (${TARGET_IP},)
 else
 	@echo "Target IP is ${TARGET_IP}"
 endif
-	${BIN_PATH}/study ${TARGET_IP} 800 > ${RES_PATH}/study.800
+	${BIN_PATH}/study ${TARGET_IP} ${MESS_BYTES} > ${RES_PATH}/study.${MESS_BYTES}
 
 attack:
 	mkdir -p ${RES_PATH}
-	${BIN_PATH}/study ${TARGET_IP} 800 > ${RES_PATH}/attack.800
+	${BIN_PATH}/study ${TARGET_IP} ${MESS_BYTES} > ${RES_PATH}/attack.${MESS_BYTES}
 
 cyphertext:
 	mkdir -p ${RES_PATH}
@@ -45,7 +46,7 @@ cyphertext:
 	cat ${RES_PATH}/attack
 
 correlate:
-	(tail -4096 ${RES_PATH}/study.800; tail -4096 ${RES_PATH}/attack.800) \
+	(tail -4096 ${RES_PATH}/study.${MESS_BYTES}; tail -4096 ${RES_PATH}/attack.${MESS_BYTES}) \
 	| ${BIN_PATH}/correlate >> ${RES_PATH}/attack
 
 search:
@@ -59,7 +60,7 @@ search:
 # Each subplot corresponds to one of the 16 bytes of the input plaintext block.
 # The input data are the most recent values obtained with the study phase.
 overview_study:
-	tail -4096 ${RES_PATH}/study.800 > ${RES_PATH}/study_tmp
+	tail -4096 ${RES_PATH}/study.${MESS_BYTES} > ${RES_PATH}/study_tmp
 	#pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/study_tmp
 	python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/study_tmp
 	rm ${RES_PATH}/study_tmp
@@ -69,7 +70,7 @@ overview_study:
 # Each subplot corresponds to one of the 16 bytes of the input plaintext block.
 # The input data are the most recent values obtained with the attack phase.
 overview_attack:
-	tail -4096 ${RES_PATH}/attack.800 > ${RES_PATH}/attack_tmp
+	tail -4096 ${RES_PATH}/attack.${MESS_BYTES} > ${RES_PATH}/attack_tmp
 	#pipenv run python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/attack_tmp
 	python3 ${TOOLS_PATH}/overview.py ${RES_PATH}/attack_tmp
 	rm ${RES_PATH}/attack_tmp
