@@ -13,7 +13,7 @@ MESS_BYTES=800
 build:
 	mkdir -p ${BIN_PATH}
 	gcc -O3 -o ${BIN_PATH}/study ${SRC_PATH}/study.c -lm
-	gcc -O3 -o ${BIN_PATH}/ciphertext ${SRC_PATH}/ciphertext.c
+	gcc -O3 -o ${BIN_PATH}/debug ${SRC_PATH}/debug.c
 	gcc -O3 -o ${BIN_PATH}/correlate ${SRC_PATH}/correlate.c -lm
 	gcc -O3 -o ${BIN_PATH}/search ${SRC_PATH}/search.c -L/usr/local/lib -lcrypto -Wno-deprecated-declarations -Wno-unused-result
 
@@ -40,10 +40,10 @@ attack:
 	mkdir -p ${RES_PATH}
 	${BIN_PATH}/study ${TARGET_IP} ${MESS_BYTES} > ${RES_PATH}/attack.${MESS_BYTES}
 
-cyphertext:
+debug:
 	mkdir -p ${RES_PATH}
-	${BIN_PATH}/ciphertext ${TARGET_IP}  > ${RES_PATH}/attack
-	cat ${RES_PATH}/attack
+	${BIN_PATH}/debug ${TARGET_IP} > ${RES_PATH}/debug
+	cat ${RES_PATH}/debug
 
 correlate:
 	(tail -4096 ${RES_PATH}/study.${MESS_BYTES}; tail -4096 ${RES_PATH}/attack.${MESS_BYTES}) \
