@@ -26,13 +26,6 @@
 
 #define MAX_MESS_LEN 2048
 
-struct Packet {
-    uint8_t nonce[16];  // 16
-    uint8_t out[16]; // 16
-    uint64_t timestampStart; // 8
-    uint64_t timestampEnd;   // 8
-}; // 48
-
 int s, messageLen;
 
 double totalPackets = 0.;
@@ -40,12 +33,13 @@ double totalTime    = 0.;
 double timeArray[16][256]              = {0.};
 double meanArray[16][256]              = {0.};
 double standardDeviationArray[16][256] = {0.};
+double sqrtTimeArray[16][256]          = {0.};
 
 long long countArray[16][256] = {0};
 
 char nonceBytes[16];
 char messageBuffer[MAX_MESS_LEN];
-char responseBuffer[sizeof(struct Packet)];
+char responseBuffer[48];
 
 inline int timeToReport(long long inputs)
 {
@@ -128,11 +122,10 @@ void collectByteTimingStatistics(double timing)
 
         // summary timing for the num nonce and byte value
         timeArray[byteNumber][byteValue] += timing;
-
-        standardDeviationArray[byteNumber][byteValue] += (timing * timing);
+        sqrtTimeArray[byteNumber][byteValue] += (timing * timing);
 
         // total packet localy (num, value)
-        ++(countArray[byteNumber][byteValue]);
+        countArray[byteNumber][byteValue] += 1;
     }
 }
 
@@ -166,8 +159,8 @@ void receivePacket()
             if (recv(s, responseBuffer, sizeof responseBuffer, 0) == sizeof responseBuffer) {
                 // same nonces
                 if (!memcmp(messageBuffer, responseBuffer, 16)) {
-                    start = ((struct Packet*)responseBuffer)->timestampStart;
-                    end = ((struct Packet*)responseBuffer)->timestampEnd;
+                    start = *(uint64_t*)(responseBuffer + 32);
+                    end = *(uint64_t*)(responseBuffer + 40);
                     timing = end - start;
                     if (timing < 20000) {
                         collectByteTimingStatistics(timing);
@@ -195,7 +188,7 @@ void report()
                 = timeArray[byteNumber][byteValue] / countArray[byteNumber][byteValue];
 
             standardDeviationArray[byteNumber][byteValue]
-                = standardDeviationArray[byteNumber][byteValue] / countArray[byteNumber][byteValue];
+                = sqrtTimeArray[byteNumber][byteValue] / countArray[byteNumber][byteValue];
 
             standardDeviationArray[byteNumber][byteValue]
                 -= (meanArray[byteNumber][byteValue] * meanArray[byteNumber][byteValue]);
@@ -215,6 +208,15 @@ void report()
                 meanArray[byteNumber][byteValue] - timeOnPacketAvg,
                 standardDeviationArray[byteNumber][byteValue] / sqrt(countArray[byteNumber][byteValue])
             );
+            /*
+            fprintf(stderr,"%2d %4d %3d %lld %.3f %.3f %.6f\n",
+                byteNumber, messageLen, byteValue,
+                countArray[byteNumber][byteValue],
+                meanArray[byteNumber][byteValue],
+                timeOnPacketAvg,
+                standardDeviationArray[byteNumber][byteValue]
+            );
+            */
         }
     }
     fflush(stdout);
